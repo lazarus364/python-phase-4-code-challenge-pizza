@@ -66,6 +66,19 @@ class Pizzas(Resource):
 class RestaurantPizzas(Resource):
     def post(self):
         data = request.get_json()
+
+        # Validate required fields
+        if not all(key in data for key in ['price', 'pizza_id', 'restaurant_id']):
+            return make_response({"errors": ["validation errors"]}, 400)
+
+        # Check if the referenced Restaurant and Pizza exist
+        restaurant = Restaurant.query.get(data['restaurant_id'])
+        pizza = Pizza.query.get(data['pizza_id'])
+
+        if not restaurant or not pizza:
+            return make_response({"errors": ["validation errors"]}, 404)
+
+        # Validate the price
         try:
             restaurant_pizza = RestaurantPizza(
                 price=data['price'],
@@ -74,9 +87,23 @@ class RestaurantPizzas(Resource):
             )
             db.session.add(restaurant_pizza)
             db.session.commit()
-            return make_response(restaurant_pizza.to_dict(), 201)
+
+            # Return the created RestaurantPizza with nested pizza and restaurant data
+            response = {
+                "id": restaurant_pizza.id,
+                "pizza": pizza.to_dict(),
+                "pizza_id": restaurant_pizza.pizza_id,
+                "price": restaurant_pizza.price,
+                "restaurant": restaurant.to_dict(),
+                "restaurant_id": restaurant_pizza.restaurant_id
+            }
+            return make_response(response, 201)
+
         except ValueError as e:
-            return make_response({"errors": [str(e)]}, 400)
+            # Handle validation errors (e.g., price out of range)
+            db.session.rollback()
+            return make_response({"errors": ["validation errors"]}, 400)  # Match the expected error messageclear
+            
 
 api.add_resource(Restaurants, '/restaurants')
 api.add_resource(RestaurantById, '/restaurants/<int:id>')
